@@ -109,7 +109,7 @@ int main(int argc,char **argv){
     	printf("%d\n", currentSec);
     	currentSec++;
     	if(currentSec % t == 0){
-        if(probability < 100*p/2){
+	if(probability < 100*p/2){
         job->type = 0; // launch
         }else if(probability < 100*p){
         job->type = 2; // assembly
@@ -244,12 +244,11 @@ pthread_mutex_unlock(&pad_B_mutex);
 
 // the function that controls the air traffic
 void* ControlTower(Job *nextJob){
-// id = 0, launch
-if(isEmpty(landQ)==0 && nextJob->type == 1){
-        Enqueue(landQ, *nextJob);
-        printf("Land job %d has been queued\n", nextJob->ID);
+        while(isEmpty(landQ)==0){
         pthread_create(&tid[thread_count++], NULL, &LandingJob, NULL);
-}else if(nextJob->type == 0){
+        }
+// id = 0, launch
+if(nextJob->type == 0){
 	Enqueue(launchQ, *nextJob);
 	printf("Launch job %d has been queued\n", nextJob->ID);
 	//waiting until pad A is available
