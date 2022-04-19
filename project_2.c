@@ -180,7 +180,6 @@ Job finished = Dequeue(landQ);
 printf("The rocket is landed to pad B! Job ID: %d\n", finished.ID);
 maintainEvents(finished.ID, currentSec, currentSec -t, 'D', 'B');
 }else{
-Job finished = *oldJob;
 printf("The rocket is landed to pad B! Job ID: %d\n", oldJob->ID);
 maintainEvents(oldJob->ID, currentSec, currentSec -t, 'D', 'B');
 }
