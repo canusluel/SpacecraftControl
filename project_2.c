@@ -23,6 +23,7 @@ void* LaunchJob(void *arg);
 void* EmergencyJob(void *arg); 
 void* AssemblyJob(void *arg); 
 void* ControlTower(Job *nextJob);
+void recordLogs();
 
 //conditions that indicates the availability of pads
 
@@ -34,6 +35,7 @@ int id, reqTime, endTime, trndTime;
 char status, pad;
 }craftEvent;
 
+craftEvent events[MAX_EVENT_NUM];
 // pthread sleeper function
 int pthread_sleep (int seconds)
 {
@@ -71,7 +73,6 @@ int main(int argc,char **argv){
     time_t curTime;
     struct tm *info;
     int time = 40;
-    craftEvent events[MAX_EVENT_NUM];
     for(int i=1; i<argc; i++){
         if(!strcmp(argv[i], "-p")) {p = atof(argv[++i]);}
         else if(!strcmp(argv[i], "-t")) {simulationTime = atoi(argv[++i]);}
@@ -92,7 +93,7 @@ int main(int argc,char **argv){
     launchQ = ConstructQueue(MAX_EVENT_NUM);
     assemblyQ = ConstructQueue(MAX_EVENT_NUM);
     Job *firstJob = (Job*) malloc(sizeof (Job));
-    firstJob->ID = thread_count;
+    firstJob->ID = 1;
     firstJob->type = 0; //launch
     
     
@@ -103,24 +104,27 @@ int main(int argc,char **argv){
         //stuff();
 
 	int probability = rand() % 100;
-        pthread_sleep(1);
-	currentSec++;
         Job *job = (Job*) malloc(sizeof (Job));
     	job->ID = thread_count;
-
+    	printf("%d\n", currentSec);
+    	currentSec++;
     	if(currentSec % t == 0){
         if(probability < 100*p/2){
         job->type = 0; // launch
-	printf("job type launch\n");
         }else if(probability < 100*p){
         job->type = 2; // assembly
-	printf("job type assm\n");
         }else{
-        job->type = 1; 
-	printf("job type land\n");} // land
+        job->type = 1; // land
+        }
     	ControlTower(job);
 	}
+	pthread_sleep(1);
     }
+    //closing threads
+    for (int i=0; i<thread_count; ++i)
+		pthread_join(tid[i], NULL);
+		
+	
     /* Queue usage example
         Queue *myQ = ConstructQueue(1000);
         Job j;
@@ -132,10 +136,35 @@ int main(int argc,char **argv){
     */
 
     // your code goes here
-
+	recordLogs();
     return 0;
 }
 
+void maintainEvents(int eventId, int eventEndTime, int eventReqTime, char eventStatus, char eventPad){
+
+events[eventNum].reqTime = eventReqTime;
+events[eventNum].id = eventId;
+events[eventNum].endTime = eventEndTime;
+events[eventNum].trndTime = eventEndTime - eventReqTime;
+events[eventNum].status = eventStatus;
+events[eventNum].pad = eventPad;
+
+}
+void recordLogs(){
+
+FILE *f = fopen("eventLog.txt", "w");
+if (f == NULL)
+{
+    printf("Error opening file!\n");
+    exit(1);
+}
+
+for(int i = 0; i<eventNum; i++){
+fprintf(f, "Event ID: %d, Status: %c, Request time: %d, End time: %d, Turnaround time: %d, Pad: %c\n", events[i].id, events[i].status, events[i].reqTime, events[i].endTime, events[i].trndTime, events[i].pad);
+}
+
+fclose(f);
+}
 // the function that creates plane threads for landing
 void* LandingJob(void *arg){
 
@@ -148,6 +177,8 @@ printf("A rocket is landing!\n");
 pthread_sleep(t);
 Job finished = Dequeue(landQ);
 printf("The rocket is landed to pad B! Job ID: %d\n", finished.ID);
+maintainEvents(finished.ID, currentSec, currentSec -t, 'D', 'B');
+eventNum++;
 pthread_cond_signal(&pad_B);
 pad_B_available = 0;
 pthread_mutex_unlock(&pad_B_mutex);
@@ -159,6 +190,8 @@ printf("A rocket is landing!\n");
 pthread_sleep(t);
 Job finished = Dequeue(landQ);
 printf("The rocket is landed to pad A! Job ID: %d\n", finished.ID);
+maintainEvents(finished.ID, currentSec, currentSec -t, 'D', 'A');
+eventNum++;
 pthread_cond_signal(&pad_A);
 pad_A_available = 0;
 pthread_mutex_unlock(&pad_A_mutex);
@@ -174,9 +207,10 @@ while(pad_A_available != 0){
 pad_A_available = 1;
 printf("A rocket is launching!\n");
 pthread_sleep(2*t);
-currentSec+=2*t;
 Job finished = Dequeue(launchQ);
 printf("The rocket is launched!, Job ID: %d\n", finished.ID);
+maintainEvents(finished.ID, currentSec, currentSec - 2*t, 'L', 'A');
+eventNum++;
 pthread_cond_signal(&pad_A);
 pad_A_available = 0;
 pthread_mutex_unlock(&pad_A_mutex);
@@ -198,9 +232,10 @@ while(pad_B_available != 0){
 pad_B_available = 1;
 printf("A rocket is being assembled!\n");
 pthread_sleep(6*t);
-currentSec+=6*t;
 Job finished = Dequeue(assemblyQ);
 printf("The rocket is assembled!, Job ID: %d\n", finished.ID);
+maintainEvents(finished.ID, currentSec, currentSec -6*t, 'A', 'B');
+eventNum++;
 pthread_cond_signal(&pad_B);
 pad_B_available = 0;
 pthread_mutex_unlock(&pad_B_mutex);
@@ -209,9 +244,8 @@ pthread_mutex_unlock(&pad_B_mutex);
 
 // the function that controls the air traffic
 void* ControlTower(Job *nextJob){
-printf("Recieved job type %d\n", nextJob->type);
 // id = 0, launch
-if(isEmpty(landQ)==0){
+if(isEmpty(landQ)==0 && nextJob->type == 1){
         Enqueue(landQ, *nextJob);
         printf("Land job %d has been queued\n", nextJob->ID);
         pthread_create(&tid[thread_count++], NULL, &LandingJob, NULL);
