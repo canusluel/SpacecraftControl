@@ -7,7 +7,7 @@
 
 #define MAX_EVENT_NUM 1000
 int simulationTime = 120;    // simulation time
-int seed = 10;               // seed for randomness
+int seed = 1;               // seed for randomness
 int emergencyFrequency = 40; // frequency of emergency
 float p = 0.2;               // probability of a ground job (launch & assembly)
 pthread_t tid[1024] = {0};	
@@ -70,7 +70,7 @@ int main(int argc,char **argv){
     struct timeval tv;
     time_t curTime;
     struct tm *info;
-    int time = 20;
+    int time = 40;
     craftEvent events[MAX_EVENT_NUM];
     for(int i=1; i<argc; i++){
         if(!strcmp(argv[i], "-p")) {p = atof(argv[++i]);}
@@ -140,7 +140,10 @@ int main(int argc,char **argv){
 void* LandingJob(void *arg){
 
 pthread_mutex_lock(&pad_B_mutex);
-pthread_cond_wait(&pad_B, &pad_B_mutex);
+while(pad_B_available != 0){
+	   pthread_cond_wait(&pad_B, &pad_B_mutex); //wait for the condition
+	}
+pad_B_available = 1;
 printf("A rocket is landing!\n");
 pthread_sleep(t);
 printf("The rocket is landed\n");
@@ -182,9 +185,9 @@ while(pad_B_available != 0){
 	   pthread_cond_wait(&pad_B, &pad_B_mutex); //wait for the condition
 	}
 pad_B_available = 1;
-pthread_cond_wait(&pad_B, &pad_B_mutex);
 printf("A rocket is being assembled!\n");
 pthread_sleep(6*t);
+currentSec+=6*t;
 Job finished = Dequeue(assemblyQ);
 printf("The rocket is assembled!, Job ID: %d\n", finished.ID);
 pthread_cond_signal(&pad_B);
@@ -208,7 +211,7 @@ if(nextJob->type == 0){
 	pthread_create(&tid[thread_count++], NULL, &LandingJob, NULL);
 }else if(nextJob->type == 2){// assemble
 	Enqueue(assemblyQ, *nextJob);
-	printf("Assembly job %d has been queued", nextJob->ID);
+	printf("Assembly job %d has been queued\n", nextJob->ID);
 	pthread_create(&tid[thread_count++], NULL, &AssemblyJob, NULL);
 }
 }
