@@ -101,12 +101,13 @@ int main(int argc,char **argv){
     //simulation
     while(currentSec<time) {
         //stuff();
-        printf("asdklşfjsaflş\n");
+
 	int probability = rand() % 100;
         pthread_sleep(1);
 	currentSec++;
         Job *job = (Job*) malloc(sizeof (Job));
     	job->ID = thread_count;
+
     	if(currentSec % t == 0){
         if(probability < 100*p/2){
         job->type = 0; // launch
@@ -149,16 +150,19 @@ pad_B_available = 0;
 pthread_mutex_unlock(&pad_B_mutex);
 
 }
-
 // the function that creates plane threads for departure
 void* LaunchJob(void *arg){
 
 pthread_mutex_lock(&pad_A_mutex);
+while(pad_A_available != 0){
+	   pthread_cond_wait(&pad_A, &pad_A_mutex); //wait for the condition
+	}
+pad_A_available = 1;
 printf("A rocket is launching!\n");
 pthread_sleep(2*t);
 currentSec+=2*t;
-printf("The rocket is launched!\n");
 Job finished = Dequeue(launchQ);
+printf("The rocket is launched!, Job ID: %d\n", finished.ID);
 pthread_cond_signal(&pad_A);
 pad_A_available = 0;
 pthread_mutex_unlock(&pad_A_mutex);
@@ -174,11 +178,15 @@ void* EmergencyJob(void *arg){
 void* AssemblyJob(void *arg){
 
 pthread_mutex_lock(&pad_B_mutex);
+while(pad_B_available != 0){
+	   pthread_cond_wait(&pad_B, &pad_B_mutex); //wait for the condition
+	}
+pad_B_available = 1;
 pthread_cond_wait(&pad_B, &pad_B_mutex);
 printf("A rocket is being assembled!\n");
 pthread_sleep(6*t);
-printf("The rocket is assembled!\n");
 Job finished = Dequeue(assemblyQ);
+printf("The rocket is assembled!, Job ID: %d\n", finished.ID);
 pthread_cond_signal(&pad_B);
 pad_B_available = 0;
 pthread_mutex_unlock(&pad_B_mutex);
@@ -191,27 +199,16 @@ printf("Recieved job type %d\n", nextJob->type);
 // id = 0, launch
 if(nextJob->type == 0){
 	Enqueue(launchQ, *nextJob);
-	printf("Job %d has been queued\n", nextJob->ID);
+	printf("Launch job %d has been queued\n", nextJob->ID);
 	//waiting until pad A is available
-	while(pad_A_available != 0){
-	   pthread_cond_wait(&pad_A, &pad_A_mutex); //wait for the condition
-	}
-	pad_A_available = 1;
 	pthread_create(&tid[thread_count++], NULL, &LaunchJob, NULL);
-
 }else if(nextJob->type == 1){// land
 	Enqueue(landQ, *nextJob);
-	printf("Job %d has been queued\n", nextJob->ID);
-	while(pad_B_available != 0){
-	   pthread_cond_wait(&pad_B, &pad_B_mutex); //wait for the condition
-	}
+	printf("Land job %d has been queued\n", nextJob->ID);
 	pthread_create(&tid[thread_count++], NULL, &LandingJob, NULL);
 }else if(nextJob->type == 2){// assemble
 	Enqueue(assemblyQ, *nextJob);
-	printf("Job %d has been queued\n", nextJob->ID);
-	while(pad_B_available != 0){
-	   pthread_cond_wait(&pad_B, &pad_B_mutex); //wait for the condition
-	}
+	printf("Assembly job %d has been queued", nextJob->ID);
 	pthread_create(&tid[thread_count++], NULL, &AssemblyJob, NULL);
 }
 }
