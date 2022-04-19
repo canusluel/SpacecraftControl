@@ -139,19 +139,30 @@ int main(int argc,char **argv){
 // the function that creates plane threads for landing
 void* LandingJob(void *arg){
 
+while(pad_B_available != 0 && pad_A_available != 0){}
+
+if(pad_B_available == 0){
 pthread_mutex_lock(&pad_B_mutex);
-while(pad_B_available != 0){
-	   pthread_cond_wait(&pad_B, &pad_B_mutex); //wait for the condition
-	}
 pad_B_available = 1;
 printf("A rocket is landing!\n");
 pthread_sleep(t);
-printf("The rocket is landed\n");
+printf("The rocket is landed to pad B!\n");
 Job finished = Dequeue(landQ);
 pthread_cond_signal(&pad_B);
 pad_B_available = 0;
 pthread_mutex_unlock(&pad_B_mutex);
 
+}else{
+pthread_mutex_lock(&pad_A_mutex);
+pad_A_available = 1;
+printf("A rocket is landing!\n");
+pthread_sleep(t);
+printf("The rocket is landed to pad A!\n");
+Job finished = Dequeue(landQ);
+pthread_cond_signal(&pad_A);
+pad_A_available = 0;
+pthread_mutex_unlock(&pad_A_mutex);
+}
 }
 // the function that creates plane threads for departure
 void* LaunchJob(void *arg){
