@@ -146,8 +146,8 @@ pthread_mutex_lock(&pad_B_mutex);
 pad_B_available = 1;
 printf("A rocket is landing!\n");
 pthread_sleep(t);
-printf("The rocket is landed to pad B!\n");
 Job finished = Dequeue(landQ);
+printf("The rocket is landed to pad B! Job ID: %d\n", finished.ID);
 pthread_cond_signal(&pad_B);
 pad_B_available = 0;
 pthread_mutex_unlock(&pad_B_mutex);
@@ -157,8 +157,8 @@ pthread_mutex_lock(&pad_A_mutex);
 pad_A_available = 1;
 printf("A rocket is landing!\n");
 pthread_sleep(t);
-printf("The rocket is landed to pad A!\n");
 Job finished = Dequeue(landQ);
+printf("The rocket is landed to pad A! Job ID: %d\n", finished.ID);
 pthread_cond_signal(&pad_A);
 pad_A_available = 0;
 pthread_mutex_unlock(&pad_A_mutex);
@@ -211,7 +211,11 @@ pthread_mutex_unlock(&pad_B_mutex);
 void* ControlTower(Job *nextJob){
 printf("Recieved job type %d\n", nextJob->type);
 // id = 0, launch
-if(nextJob->type == 0){
+if(isEmpty(landQ)==0){
+        Enqueue(landQ, *nextJob);
+        printf("Land job %d has been queued\n", nextJob->ID);
+        pthread_create(&tid[thread_count++], NULL, &LandingJob, NULL);
+}else if(nextJob->type == 0){
 	Enqueue(launchQ, *nextJob);
 	printf("Launch job %d has been queued\n", nextJob->ID);
 	//waiting until pad A is available
