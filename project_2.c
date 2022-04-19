@@ -101,12 +101,25 @@ int main(int argc,char **argv){
     //simulation
     while(currentSec<time) {
         //stuff();
+
+	int probability = rand() % 100;
         pthread_sleep(1);
 	currentSec++;
         Job *job = (Job*) malloc(sizeof (Job));
     	job->ID = thread_count;
-    	job->type = 1; //launch
+
+    	if(currentSec % t == 0){
+        if(probability < 100*p/2){
+        job->type = 0; // launch
+	printf("job type launch\n");
+        }else if(probability < 100*p){
+        job->type = 2; // assembly
+	printf("job type assm\n");
+        }else{
+        job->type = 1; 
+	printf("job type land\n");} // land
     	ControlTower(job);
+	}
     }
     /* Queue usage example
         Queue *myQ = ConstructQueue(1000);
