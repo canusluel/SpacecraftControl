@@ -18,7 +18,7 @@ int pad_B_available = 0; // 0 available
 int t = 2;
 int currentSec = 0;
 Queue *landQ, *launchQ, *assemblyQ;
-void* LandingJob(void *arg); 
+void* LandingJob(Job *oldJob); 
 void* LaunchJob(void *arg);
 void* EmergencyJob(void *arg); 
 void* AssemblyJob(void *arg); 
@@ -166,7 +166,7 @@ fprintf(f, "Event ID: %d, Status: %c, Request time: %d, End time: %d, Turnaround
 fclose(f);
 }
 // the function that creates plane threads for landing
-void* LandingJob(void *arg){
+void* LandingJob(Job *oldJob){
 
 while(pad_B_available != 0 && pad_A_available != 0){}
 
@@ -175,9 +175,15 @@ pthread_mutex_lock(&pad_B_mutex);
 pad_B_available = 1;
 printf("A rocket is landing!\n");
 pthread_sleep(t);
+if(oldJob == NULL){
 Job finished = Dequeue(landQ);
 printf("The rocket is landed to pad B! Job ID: %d\n", finished.ID);
 maintainEvents(finished.ID, currentSec, currentSec -t, 'D', 'B');
+}else{
+Job finished = *oldJob;
+printf("The rocket is landed to pad B! Job ID: %d\n", oldJob->ID);
+maintainEvents(oldJob->ID, currentSec, currentSec -t, 'D', 'B');
+}
 eventNum++;
 pthread_cond_signal(&pad_B);
 pad_B_available = 0;
@@ -188,9 +194,14 @@ pthread_mutex_lock(&pad_A_mutex);
 pad_A_available = 1;
 printf("A rocket is landing!\n");
 pthread_sleep(t);
+if(oldJob == NULL){
 Job finished = Dequeue(landQ);
 printf("The rocket is landed to pad A! Job ID: %d\n", finished.ID);
 maintainEvents(finished.ID, currentSec, currentSec -t, 'D', 'A');
+}else{
+printf("The rocket is landed to pad A! Job ID: %d\n", oldJob->ID);
+maintainEvents(oldJob->ID, currentSec, currentSec -t, 'D', 'A');
+}
 eventNum++;
 pthread_cond_signal(&pad_A);
 pad_A_available = 0;
@@ -245,11 +256,13 @@ pthread_mutex_unlock(&pad_B_mutex);
 // the function that controls the air traffic
 void* ControlTower(Job *nextJob){
 // id = 0, launch
-if(isEmpty(landQ)==0 && nextJob->type == 1){
-        Enqueue(landQ, *nextJob);
-        printf("Land job %d has been queued\n", nextJob->ID);
-        pthread_create(&tid[thread_count++], NULL, &LandingJob, NULL);
-}else if(nextJob->type == 0){
+while(isEmpty(landQ)==0){
+        Job oldLandJob = Dequeue(landQ);
+        printf("Old land job %d has been queued\n", oldLandJob.ID);
+        pthread_create(&tid[thread_count++], NULL, (void *)&LandingJob, &oldLandJob);
+}
+
+if(nextJob->type == 0){
 	Enqueue(launchQ, *nextJob);
 	printf("Launch job %d has been queued\n", nextJob->ID);
 	//waiting until pad A is available
@@ -257,7 +270,7 @@ if(isEmpty(landQ)==0 && nextJob->type == 1){
 }else if(nextJob->type == 1){// land
 	Enqueue(landQ, *nextJob);
 	printf("Land job %d has been queued\n", nextJob->ID);
-	pthread_create(&tid[thread_count++], NULL, &LandingJob, NULL);
+	pthread_create(&tid[thread_count++], NULL, (void *)&LandingJob, NULL);
 }else if(nextJob->type == 2){// assemble
 	Enqueue(assemblyQ, *nextJob);
 	printf("Assembly job %d has been queued\n", nextJob->ID);
