@@ -6,8 +6,9 @@
 #include <string.h>
 
 #define MAX_EVENT_NUM 1000
-int simulationTime = 120;    // simulation time
-int seed = 1;               // seed for randomness
+#define JOB_NUM 3
+int simulationTime = 40;    // simulation time
+int seed = 10;               // seed for randomness
 int emergencyFrequency = 40; // frequency of emergency
 float p = 0.2;               // probability of a ground job (launch & assembly)
 pthread_t tid[1024] = {0};	
@@ -16,6 +17,9 @@ int eventNum = 0;
 int pad_A_available = 0; // 0 available
 int pad_B_available = 0; // 0 available
 int t = 2;
+//current seconds in simulation
+time_t curTime;
+time_t startTime;
 int currentSec = 0;
 Queue *landQ, *launchQ, *assemblyQ;
 void* LandingJob(void *arg); 
@@ -24,7 +28,7 @@ void* EmergencyJob(void *arg);
 void* AssemblyJob(void *arg); 
 void* ControlTower(Job *nextJob);
 void recordLogs();
-
+void printOngoingJobs(int n);
 //conditions that indicates the availability of pads
 
 pthread_cond_t pad_A, pad_B;
@@ -70,13 +74,15 @@ int main(int argc,char **argv){
     // -t (int) => simulation time in seconds
     // -s (int) => change the random seed
     struct timeval tv;
-    time_t curTime;
     struct tm *info;
-    int time = 40;
+    int n = -1;
+    int jobNums[JOB_NUM] = {0, 0, 0};
+    long time;
     for(int i=1; i<argc; i++){
         if(!strcmp(argv[i], "-p")) {p = atof(argv[++i]);}
         else if(!strcmp(argv[i], "-t")) {simulationTime = atoi(argv[++i]);}
         else if(!strcmp(argv[i], "-s"))  {seed = atoi(argv[++i]);}
+        else if(!strcmp(argv[i], "-n"))  {n = atoi(argv[++i]);}
     }
     
     srand(seed); // feed the seed
@@ -86,29 +92,34 @@ int main(int argc,char **argv){
     pthread_cond_init(&pad_B,NULL);
     gettimeofday(&tv, NULL);
     curTime = tv.tv_sec;
-
+    time = curTime + simulationTime;
     info = localtime(&curTime);
-    printf("Current time of day: %s",asctime (info));
+    printf("Current time of day: %s\n",asctime (info));
+    printf("Current start second: %ld\n", curTime);
+    startTime = curTime;
     landQ = ConstructQueue(MAX_EVENT_NUM);
     launchQ = ConstructQueue(MAX_EVENT_NUM);
     assemblyQ = ConstructQueue(MAX_EVENT_NUM);
     Job *firstJob = (Job*) malloc(sizeof (Job));
     firstJob->ID = 1;
     firstJob->type = 0; //launch
-    
-    
+    firstJob->reqTime = curTime + simulationTime - time;
+    printf("Simulation will run %ld seconds!\n", time - curTime);
     // creating a seperate thread for control tower
     pthread_create(&tid[thread_count++], NULL, (void *)&ControlTower, firstJob);
+    pthread_sleep(1);
     //simulation
-    while(currentSec<time) {
+    while(curTime<time) {
         //stuff();
 
 	int probability = rand() % 100;
-        Job *job = (Job*) malloc(sizeof (Job));
+    	gettimeofday(&tv, NULL);
+    	curTime = tv.tv_sec;
+    	printf("Current second in sim: %ld\n", curTime + simulationTime - time);
+    	if(curTime % t == 0){
+    	Job *job = (Job*) malloc(sizeof (Job));
     	job->ID = thread_count;
-    	printf("%d\n", currentSec);
-    	currentSec++;
-    	if(currentSec % t == 0){
+    	
 	if(probability < 100*p/2){
         job->type = 0; // launch
         }else if(probability < 100*p){
@@ -116,6 +127,7 @@ int main(int argc,char **argv){
         }else{
         job->type = 1; // land
         }
+        job->reqTime = curTime + simulationTime - time;
     	ControlTower(job);
 	}
 	pthread_sleep(1);
@@ -136,10 +148,34 @@ int main(int argc,char **argv){
     */
 
     // your code goes here
+    //if program is called with -n flag, prints ongoing jobs
+    	if(n != -1) printOngoingJobs(n);
 	recordLogs();
     return 0;
 }
+void printOngoingJobs(int n){
 
+printf("At %d sec landing: ", n);
+for(int i = 0; i<eventNum; i++){
+	if(events[i].endTime > n && events[i].reqTime < n && events[i].status == 'L'){
+	printf("%d ", events[i].id);
+	}
+}
+printf("\n");
+printf("At %d sec launch: ", n);
+for(int i = 0; i<eventNum; i++){
+	if(events[i].endTime > n && events[i].reqTime < n && events[i].status == 'D'){
+	printf("%d ", events[i].id);
+	}
+}
+printf("\n");
+printf("At %d sec assembly: ", n);
+for(int i = 0; i<eventNum; i++){
+	if(events[i].endTime > n && events[i].reqTime < n && events[i].status == 'A'){
+	printf("%d ", events[i].id);
+	}
+}
+}
 void maintainEvents(int eventId, int eventEndTime, int eventReqTime, char eventStatus, char eventPad){
 
 events[eventNum].reqTime = eventReqTime;
@@ -170,6 +206,9 @@ void* LandingJob(void *arg){
 
 while(pad_B_available != 0 && pad_A_available != 0){}
 
+struct timeval tv;
+time_t finishTime;
+
 if(pad_B_available == 0){
 pthread_mutex_lock(&pad_B_mutex);
 pad_B_available = 1;
@@ -177,7 +216,9 @@ printf("A rocket is landing!\n");
 pthread_sleep(t);
 Job finished = Dequeue(landQ);
 printf("The rocket is landed to pad B! Job ID: %d\n", finished.ID);
-maintainEvents(finished.ID, currentSec, currentSec -t, 'D', 'B');
+gettimeofday(&tv, NULL);
+finishTime = tv.tv_sec - startTime;
+maintainEvents(finished.ID, finishTime, finished.reqTime, 'L', 'B');
 eventNum++;
 pthread_cond_signal(&pad_B);
 pad_B_available = 0;
@@ -190,7 +231,9 @@ printf("A rocket is landing!\n");
 pthread_sleep(t);
 Job finished = Dequeue(landQ);
 printf("The rocket is landed to pad A! Job ID: %d\n", finished.ID);
-maintainEvents(finished.ID, currentSec, currentSec -t, 'D', 'A');
+gettimeofday(&tv, NULL);
+finishTime = tv.tv_sec - startTime;
+maintainEvents(finished.ID, finishTime, finished.reqTime, 'L', 'A');
 eventNum++;
 pthread_cond_signal(&pad_A);
 pad_A_available = 0;
@@ -204,12 +247,18 @@ pthread_mutex_lock(&pad_A_mutex);
 while(pad_A_available != 0){
 	   pthread_cond_wait(&pad_A, &pad_A_mutex); //wait for the condition
 	}
+	
+struct timeval tv;
+time_t finishTime;
+
 pad_A_available = 1;
 printf("A rocket is launching!\n");
 pthread_sleep(2*t);
 Job finished = Dequeue(launchQ);
+gettimeofday(&tv, NULL);
+finishTime = tv.tv_sec - startTime;
 printf("The rocket is launched!, Job ID: %d\n", finished.ID);
-maintainEvents(finished.ID, currentSec, currentSec - 2*t, 'L', 'A');
+maintainEvents(finished.ID, finishTime, finished.reqTime, 'D', 'A');
 eventNum++;
 pthread_cond_signal(&pad_A);
 pad_A_available = 0;
@@ -229,12 +278,18 @@ pthread_mutex_lock(&pad_B_mutex);
 while(pad_B_available != 0){
 	   pthread_cond_wait(&pad_B, &pad_B_mutex); //wait for the condition
 	}
+	
+struct timeval tv;
+time_t finishTime;
+
 pad_B_available = 1;
 printf("A rocket is being assembled!\n");
 pthread_sleep(6*t);
 Job finished = Dequeue(assemblyQ);
 printf("The rocket is assembled!, Job ID: %d\n", finished.ID);
-maintainEvents(finished.ID, currentSec, currentSec -6*t, 'A', 'B');
+gettimeofday(&tv, NULL);
+finishTime = tv.tv_sec - startTime;
+maintainEvents(finished.ID, finishTime, finished.reqTime, 'A', 'B');
 eventNum++;
 pthread_cond_signal(&pad_B);
 pad_B_available = 0;
