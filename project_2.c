@@ -21,6 +21,7 @@ int t = 2;
 time_t curTime;
 time_t startTime;
 int currentSec = 0;
+int emergency = 0;
 Queue *landQ, *launchQ, *assemblyQ;
 void* LandingJob(void *arg); 
 void* LaunchJob(void *arg);
@@ -119,7 +120,7 @@ int main(int argc,char **argv){
     	if(curTime % t == 0){
     	Job *job = (Job*) malloc(sizeof (Job));
     	job->ID = thread_count;
-    	
+    	if(curTime % 40*t == 0){ emergency = 1; }
 	if(probability < 100*p/2){
         job->type = 0; // launch
         }else if(probability < 100*p){
@@ -263,12 +264,13 @@ eventNum++;
 pthread_cond_signal(&pad_A);
 pad_A_available = 0;
 pthread_mutex_unlock(&pad_A_mutex);
-
+//--
+//if(launchQ->size >= 3){ controlTower(Dequeue(launchQ)); }
 }
 
 // the function that creates plane threads for emergency landing
 void* EmergencyJob(void *arg){
-
+printf("nice\n");
 }
 
 // the function that creates plane threads for emergency landing
@@ -294,12 +296,30 @@ eventNum++;
 pthread_cond_signal(&pad_B);
 pad_B_available = 0;
 pthread_mutex_unlock(&pad_B_mutex);
-
+//--
+//if(assemblyQ->size >= 3){ controlTower(Dequeue(assemblyQ)); }
 }
 
 // the function that controls the air traffic
 void* ControlTower(Job *nextJob){
-        while(isEmpty(landQ)==0){
+	if(emergency==1){
+	printf("Emergency landing initiated!\n");
+	pthread_create(&tid[thread_count++], NULL, &EmergencyJob, NULL);
+	emergency = 0;
+	}
+	//to avoid starvation of landing jobs
+ 	if(landingQ->size >= 6){
+	pthread_create(&tid[thread_count++], NULL, &LandingJob, NULL);
+	}  
+	if(assemblyQ->size >= 3){
+	printf("Assembly has been prioritized\n");
+	pthread_create(&tid[thread_count++], NULL, &AssemblyJob, NULL);
+	}
+        if(launchQ->size >= 3){
+	printf("Launch has been prioritized\n");
+        pthread_create(&tid[thread_count++], NULL, &LaunchJob, NULL);
+        }
+        if(isEmpty(landQ)==0){
         pthread_create(&tid[thread_count++], NULL, &LandingJob, NULL);
         }
 // id = 0, launch
