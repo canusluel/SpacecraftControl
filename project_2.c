@@ -7,7 +7,7 @@
 
 #define MAX_EVENT_NUM 1000
 #define JOB_NUM 3
-int simulationTime = 40;    // simulation time
+int simulationTime = 120;    // simulation time
 int seed = 10;               // seed for randomness
 int emergencyFrequency = 40; // frequency of emergency
 float p = 0.2;               // probability of a ground job (launch & assembly)
@@ -29,7 +29,7 @@ void* EmergencyJob(void *arg);
 void* AssemblyJob(void *arg); 
 void* ControlTower(Job *nextJob);
 void recordLogs();
-void printOngoingJobs(int n);
+void printWaitingJobs(int n);
 //conditions that indicates the availability of pads
 
 pthread_cond_t pad_A, pad_B;
@@ -117,10 +117,12 @@ int main(int argc,char **argv){
     	gettimeofday(&tv, NULL);
     	curTime = tv.tv_sec;
     	printf("Current second in sim: %ld\n", curTime + simulationTime - time);
-    	if(curTime % t == 0){
+    	if((curTime + simulationTime - time) % t == 0){
     	Job *job = (Job*) malloc(sizeof (Job));
     	job->ID = thread_count;
-    	if(curTime % 40*t == 0){ emergency = 1; }
+    	if((curTime + simulationTime - time) % (emergencyFrequency*t) == 0){
+    	 emergency = 1; 
+    	 }
 	if(probability < 100*p/2){
         job->type = 0; // launch
         }else if(probability < 100*p){
@@ -148,31 +150,33 @@ int main(int argc,char **argv){
         DestructQueue(myQ);
     */
 
+	printf("The simulation is ended! waiting remaining jobs to finish..");
+	pthread_sleep(1);
     // your code goes here
     //if program is called with -n flag, prints ongoing jobs
-    	if(n != -1) printOngoingJobs(n);
+    	if(n != -1) printWaitingJobs(n);
 	recordLogs();
     return 0;
 }
-void printOngoingJobs(int n){
+void printWaitingJobs(int n){
 
 printf("At %d sec landing: ", n);
 for(int i = 0; i<eventNum; i++){
-	if(events[i].endTime > n && events[i].reqTime < n && events[i].status == 'L'){
+	if(events[i].endTime > n && events[i].reqTime < n && events[i].status == 'L' && events[i].trndTime > t){
 	printf("%d ", events[i].id);
 	}
 }
 printf("\n");
 printf("At %d sec launch: ", n);
 for(int i = 0; i<eventNum; i++){
-	if(events[i].endTime > n && events[i].reqTime < n && events[i].status == 'D'){
+	if(events[i].endTime > n && events[i].reqTime < n && events[i].status == 'D' && events[i].trndTime > 2*t){
 	printf("%d ", events[i].id);
 	}
 }
 printf("\n");
 printf("At %d sec assembly: ", n);
 for(int i = 0; i<eventNum; i++){
-	if(events[i].endTime > n && events[i].reqTime < n && events[i].status == 'A'){
+	if(events[i].endTime > n && events[i].reqTime < n && events[i].status == 'A' && events[i].trndTime > 6*t){
 	printf("%d ", events[i].id);
 	}
 }
@@ -302,13 +306,14 @@ pthread_mutex_unlock(&pad_B_mutex);
 
 // the function that controls the air traffic
 void* ControlTower(Job *nextJob){
+/*
 	if(emergency==1){
 	printf("Emergency landing initiated!\n");
 	pthread_create(&tid[thread_count++], NULL, &EmergencyJob, NULL);
 	emergency = 0;
 	}
 	//to avoid starvation of landing jobs
- 	if(landingQ->size >= 6){
+ 	if(landQ->size >= 6){
 	pthread_create(&tid[thread_count++], NULL, &LandingJob, NULL);
 	}  
 	if(assemblyQ->size >= 3){
@@ -322,6 +327,7 @@ void* ControlTower(Job *nextJob){
         if(isEmpty(landQ)==0){
         pthread_create(&tid[thread_count++], NULL, &LandingJob, NULL);
         }
+        */
 // id = 0, launch
 if(nextJob->type == 0){
 	Enqueue(launchQ, *nextJob);
