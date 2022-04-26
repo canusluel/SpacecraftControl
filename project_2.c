@@ -4,6 +4,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include <string.h>
+#include <sched.h>
 
 #define MAX_EVENT_NUM 1000
 #define JOB_NUM 3
@@ -135,6 +136,8 @@ int main(int argc,char **argv){
 	}
 	pthread_sleep(1);
     }
+    printf("The simulation is ended! waiting remaining jobs to finish..\n");
+    pthread_sleep(1);
     //closing threads
     for (int i=0; i<thread_count; ++i)
 		pthread_join(tid[i], NULL);
@@ -150,10 +153,8 @@ int main(int argc,char **argv){
         DestructQueue(myQ);
     */
 
-	printf("The simulation is ended! waiting remaining jobs to finish..");
-	pthread_sleep(1);
     // your code goes here
-    //if program is called with -n flag, prints ongoing jobs
+    //if program is called with -n flag, prints waiting jobs
     	if(n != -1) printWaitingJobs(n);
 	recordLogs();
     return 0;
@@ -218,8 +219,8 @@ if(pad_B_available == 0){
 pthread_mutex_lock(&pad_B_mutex);
 pad_B_available = 1;
 printf("A rocket is landing!\n");
-pthread_sleep(t);
 Job finished = Dequeue(landQ);
+pthread_sleep(t);
 printf("The rocket is landed to pad B! Job ID: %d\n", finished.ID);
 gettimeofday(&tv, NULL);
 finishTime = tv.tv_sec - startTime;
@@ -233,8 +234,8 @@ pthread_mutex_unlock(&pad_B_mutex);
 pthread_mutex_lock(&pad_A_mutex);
 pad_A_available = 1;
 printf("A rocket is landing!\n");
-pthread_sleep(t);
 Job finished = Dequeue(landQ);
+pthread_sleep(t);
 printf("The rocket is landed to pad A! Job ID: %d\n", finished.ID);
 gettimeofday(&tv, NULL);
 finishTime = tv.tv_sec - startTime;
@@ -258,8 +259,8 @@ time_t finishTime;
 
 pad_A_available = 1;
 printf("A rocket is launching!\n");
-pthread_sleep(2*t);
 Job finished = Dequeue(launchQ);
+pthread_sleep(2*t);
 gettimeofday(&tv, NULL);
 finishTime = tv.tv_sec - startTime;
 printf("The rocket is launched!, Job ID: %d\n", finished.ID);
@@ -290,8 +291,8 @@ time_t finishTime;
 
 pad_B_available = 1;
 printf("A rocket is being assembled!\n");
-pthread_sleep(6*t);
 Job finished = Dequeue(assemblyQ);
+pthread_sleep(6*t);
 printf("The rocket is assembled!, Job ID: %d\n", finished.ID);
 gettimeofday(&tv, NULL);
 finishTime = tv.tv_sec - startTime;
@@ -306,41 +307,54 @@ pthread_mutex_unlock(&pad_B_mutex);
 
 // the function that controls the air traffic
 void* ControlTower(Job *nextJob){
+pthread_attr_t tattr;
+int jobThread;
+int jobPriority = 10;
+struct sched_param param;
+//initializing the attributes to default
+pthread_attr_init (&tattr);
+//checking the current scheduling parameter
+pthread_attr_getschedparam (&tattr, &param);
 /*
 	if(emergency==1){
 	printf("Emergency landing initiated!\n");
 	pthread_create(&tid[thread_count++], NULL, &EmergencyJob, NULL);
 	emergency = 0;
 	}
+	*/
 	//to avoid starvation of landing jobs
- 	if(landQ->size >= 6){
-	pthread_create(&tid[thread_count++], NULL, &LandingJob, NULL);
-	}  
-	if(assemblyQ->size >= 3){
-	printf("Assembly has been prioritized\n");
-	pthread_create(&tid[thread_count++], NULL, &AssemblyJob, NULL);
-	}
-        if(launchQ->size >= 3){
-	printf("Launch has been prioritized\n");
-        pthread_create(&tid[thread_count++], NULL, &LaunchJob, NULL);
-        }
-        if(isEmpty(landQ)==0){
-        pthread_create(&tid[thread_count++], NULL, &LandingJob, NULL);
-        }
-        */
 // id = 0, launch
 if(nextJob->type == 0){
 	Enqueue(launchQ, *nextJob);
 	printf("Launch job %d has been queued\n", nextJob->ID);
-	//waiting until pad A is available
-	pthread_create(&tid[thread_count++], NULL, &LaunchJob, NULL);
+	if(launchQ->size >= 3){
+	printf("Launch has been prioritized\n");
+        jobPriority = 2; 
+        }
+        //setting the current scheduling priority to job priority
+	param.sched_priority = jobPriority;
+	jobThread = pthread_attr_setschedparam (&tattr, &param);
+	printf("Task priority of launch, (Job ID: %d): %d\n",nextJob->ID, param.sched_priority);
+	//creating thread with the related function and priority parameter
+	jobThread = pthread_create (&tid[thread_count++], &tattr, &LaunchJob, NULL);
 }else if(nextJob->type == 1){// land
 	Enqueue(landQ, *nextJob);
 	printf("Land job %d has been queued\n", nextJob->ID);
-	pthread_create(&tid[thread_count++], NULL, &LandingJob, NULL);
+	jobPriority = 3; 
+	param.sched_priority = jobPriority;
+	jobThread = pthread_attr_setschedparam (&tattr, &param);
+	printf("Task priority of land, (Job ID: %d): %d\n",nextJob->ID, param.sched_priority);
+	jobThread = pthread_create (&tid[thread_count++], &tattr, &LandingJob, NULL);
 }else if(nextJob->type == 2){// assemble
 	Enqueue(assemblyQ, *nextJob);
 	printf("Assembly job %d has been queued\n", nextJob->ID);
-	pthread_create(&tid[thread_count++], NULL, &AssemblyJob, NULL);
+	if(assemblyQ->size >= 3){
+	printf("Assembly has been prioritized\n");
+	jobPriority = 2; 
+	}
+	param.sched_priority = jobPriority;
+	jobThread = pthread_attr_setschedparam (&tattr, &param);
+	printf("Task priority of assemble, (Job ID: %d): %d\n",nextJob->ID, param.sched_priority);
+	jobThread = pthread_create (&tid[thread_count++], &tattr, &AssemblyJob, NULL);
 }
 }
