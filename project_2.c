@@ -123,13 +123,21 @@ int main(int argc,char **argv){
     	if((curTime + simulationTime - time) % (emergencyFrequency*t) == 0){
         emergency = 1;
 	job->type = 1;
-	ControlTower(job); 
+	Job  *job2 = (Job*) malloc(sizeof (Job));
+	job2->ID = thread_count;
+	job->ID = thread_count+1;
+	job2->type = 1;
+	job2->reqTime = curTime + simulationTime - time;
+	ControlTower(job2); 
     	}
 	else if(probability < 100*p/2){
+	emergency = 0;
         job->type = 0; // launch
         }else if(probability < 100*p){
+	emergency = 0;
         job->type = 2; // assembly
         }else{
+	emergency = 0;
         job->type = 1; // land
         }
         job->reqTime = curTime + simulationTime - time;
@@ -225,7 +233,11 @@ pthread_sleep(t);
 printf("The rocket is landed to pad B! Job ID: %d\n", finished.ID);
 gettimeofday(&tv, NULL);
 finishTime = tv.tv_sec - startTime;
+if(emergency == 1){
+maintainEvents(finished.ID, finishTime, finished.reqTime, 'E', 'B');
+}else{
 maintainEvents(finished.ID, finishTime, finished.reqTime, 'L', 'B');
+}
 eventNum++;
 pthread_cond_signal(&pad_B);
 pad_B_available = 0;
@@ -240,7 +252,11 @@ pthread_sleep(t);
 printf("The rocket is landed to pad A! Job ID: %d\n", finished.ID);
 gettimeofday(&tv, NULL);
 finishTime = tv.tv_sec - startTime;
+if(emergency == 1){
+maintainEvents(finished.ID, finishTime, finished.reqTime, 'E', 'A');
+}else{
 maintainEvents(finished.ID, finishTime, finished.reqTime, 'L', 'A');
+}
 eventNum++;
 pthread_cond_signal(&pad_A);
 pad_A_available = 0;
@@ -333,7 +349,7 @@ if(nextJob->type == 0){
 	Enqueue(landQ, *nextJob);
 	printf("Land job %d has been queued\n", nextJob->ID);
 	if(emergency == 1){
-	printf("Emergency landings initiated!\n");
+	printf("Emergency landings in sequence!\n");
 	jobPriority = 1; 
 	}
 	else if(landQ->size >= 6){
