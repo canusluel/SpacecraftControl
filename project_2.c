@@ -26,7 +26,6 @@ int emergency = 0;
 Queue *landQ, *launchQ, *assemblyQ;
 void* LandingJob(void *arg); 
 void* LaunchJob(void *arg);
-void* EmergencyJob(void *arg); 
 void* AssemblyJob(void *arg); 
 void* ControlTower(Job *nextJob);
 void recordLogs();
@@ -122,9 +121,11 @@ int main(int argc,char **argv){
     	Job *job = (Job*) malloc(sizeof (Job));
     	job->ID = thread_count;
     	if((curTime + simulationTime - time) % (emergencyFrequency*t) == 0){
-    	 emergency = 1; 
-    	 }
-	if(probability < 100*p/2){
+        emergency = 1;
+	job->type = 1;
+	ControlTower(job); 
+    	}
+	else if(probability < 100*p/2){
         job->type = 0; // launch
         }else if(probability < 100*p){
         job->type = 2; // assembly
@@ -272,11 +273,6 @@ pthread_mutex_unlock(&pad_A_mutex);
 }
 
 // the function that creates plane threads for emergency landing
-void* EmergencyJob(void *arg){
-printf("nice\n");
-}
-
-// the function that creates plane threads for emergency landing
 void* AssemblyJob(void *arg){
 
 pthread_mutex_lock(&pad_B_mutex);
@@ -336,7 +332,11 @@ if(nextJob->type == 0){
 }else if(nextJob->type == 1){// land
 	Enqueue(landQ, *nextJob);
 	printf("Land job %d has been queued\n", nextJob->ID);
-	if(landQ->size >= 6){
+	if(emergency == 1){
+	printf("Emergency landings initiated!\n");
+	jobPriority = 1; 
+	}
+	else if(landQ->size >= 6){
 	printf("Land has been prioritized\n");
 	jobPriority = 2;
 	}else{
