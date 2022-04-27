@@ -269,8 +269,6 @@ eventNum++;
 pthread_cond_signal(&pad_A);
 pad_A_available = 0;
 pthread_mutex_unlock(&pad_A_mutex);
-//--
-//if(launchQ->size >= 3){ controlTower(Dequeue(launchQ)); }
 }
 
 // the function that creates plane threads for emergency landing
@@ -301,8 +299,6 @@ eventNum++;
 pthread_cond_signal(&pad_B);
 pad_B_available = 0;
 pthread_mutex_unlock(&pad_B_mutex);
-//--
-//if(assemblyQ->size >= 3){ controlTower(Dequeue(assemblyQ)); }
 }
 
 // the function that controls the air traffic
@@ -329,7 +325,7 @@ if(nextJob->type == 0){
 	printf("Launch job %d has been queued\n", nextJob->ID);
 	if(launchQ->size >= 3){
 	printf("Launch has been prioritized\n");
-        jobPriority = 2; 
+        jobPriority = 3; 
         }
         //setting the current scheduling priority to job priority
 	param.sched_priority = jobPriority;
@@ -340,7 +336,12 @@ if(nextJob->type == 0){
 }else if(nextJob->type == 1){// land
 	Enqueue(landQ, *nextJob);
 	printf("Land job %d has been queued\n", nextJob->ID);
-	jobPriority = 3; 
+	if(landQ->size >= 6){
+	printf("Land has been prioritized\n");
+	jobPriority = 2;
+	}else{
+	jobPriority = 4;
+	} 
 	param.sched_priority = jobPriority;
 	jobThread = pthread_attr_setschedparam (&tattr, &param);
 	printf("Task priority of land, (Job ID: %d): %d\n",nextJob->ID, param.sched_priority);
@@ -350,7 +351,7 @@ if(nextJob->type == 0){
 	printf("Assembly job %d has been queued\n", nextJob->ID);
 	if(assemblyQ->size >= 3){
 	printf("Assembly has been prioritized\n");
-	jobPriority = 2; 
+	jobPriority = 3; 
 	}
 	param.sched_priority = jobPriority;
 	jobThread = pthread_attr_setschedparam (&tattr, &param);
