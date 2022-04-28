@@ -14,15 +14,14 @@ int emergencyFrequency = 40; // frequency of emergency
 float p = 0.2;               // probability of a ground job (launch & assembly)
 pthread_t tid[1024] = {0};	
 int thread_count = 0;
-int eventNum = 0;
+int eventNum = 0; // number of events
 int pad_A_available = 0; // 0 available
 int pad_B_available = 0; // 0 available
 int t = 2;
-//current seconds in simulation
-time_t curTime;
-time_t startTime;
+time_t curTime; // current seconds in simulation
+time_t startTime; // start time of simulation
 int currentSec = 0;
-int emergency = 0;
+int emergency = 0; // emergency condition
 Queue *landQ, *launchQ, *assemblyQ;
 void* LandingJob(void *arg); 
 void* LaunchJob(void *arg);
@@ -31,10 +30,9 @@ void* ControlTower(Job *nextJob);
 void recordLogs();
 void printWaitingJobs(int n);
 //conditions that indicates the availability of pads
-
 pthread_cond_t pad_A, pad_B;
 pthread_mutex_t pad_A_mutex, pad_B_mutex;
-
+//struct that is used to print the logs
 typedef struct craftEvent{
 int id, reqTime, endTime, trndTime;
 char status, pad;
@@ -87,10 +85,12 @@ int main(int argc,char **argv){
     }
     
     srand(seed); // feed the seed
+    //initializing mutexes
     pthread_mutex_init(&pad_A_mutex, NULL);
     pthread_mutex_init(&pad_B_mutex, NULL);
     pthread_cond_init(&pad_A,NULL);
     pthread_cond_init(&pad_B,NULL);
+    //getting current time of day and using it as star time for simulation
     gettimeofday(&tv, NULL);
     curTime = tv.tv_sec;
     time = curTime + simulationTime;
@@ -98,6 +98,7 @@ int main(int argc,char **argv){
     printf("Current time of day: %s\n",asctime (info));
     printf("Current start second: %ld\n", curTime);
     startTime = curTime;
+    //creating queues for each job type
     landQ = ConstructQueue(MAX_EVENT_NUM);
     launchQ = ConstructQueue(MAX_EVENT_NUM);
     assemblyQ = ConstructQueue(MAX_EVENT_NUM);
@@ -111,19 +112,19 @@ int main(int argc,char **argv){
     pthread_sleep(1);
     //simulation
     while(curTime<time) {
-        //stuff();
-
 	int probability = rand() % 100;
+	//getting current time in each iteration to identify the request time of current job
     	gettimeofday(&tv, NULL);
     	curTime = tv.tv_sec;
     	printf("Current second in sim: %ld\n", curTime + simulationTime - time);
+    	//calling a job in every t sec
     	if((curTime + simulationTime - time) % t == 0){
     	Job *job = (Job*) malloc(sizeof (Job));
     	job->ID = thread_count;
-    	if((curTime + simulationTime - time) % (emergencyFrequency*t) == 0){
+    	if((curTime + simulationTime - time) % (emergencyFrequency*t) == 0){// emergency
         emergency = 1;
 	job->type = 1;
-	Job  *job2 = (Job*) malloc(sizeof (Job));
+	Job *job2 = (Job*) malloc(sizeof (Job));
 	job2->ID = thread_count;
 	job->ID = thread_count+1;
 	job2->type = 1;
@@ -168,6 +169,7 @@ int main(int argc,char **argv){
 	recordLogs();
     return 0;
 }
+//this function prints the waiting jobs in the nth second
 void printWaitingJobs(int n){
 
 printf("At %d sec landing: ", n);
@@ -190,7 +192,9 @@ for(int i = 0; i<eventNum; i++){
 	printf("%d ", events[i].id);
 	}
 }
+printf("\n");
 }
+//this function keeps the logs of events in global array, later to be printed in eventLog.txt
 void maintainEvents(int eventId, int eventEndTime, int eventReqTime, char eventStatus, char eventPad){
 
 events[eventNum].reqTime = eventReqTime;
@@ -201,8 +205,9 @@ events[eventNum].status = eventStatus;
 events[eventNum].pad = eventPad;
 
 }
+//this function prints the logs in arroy to eventLog.txt
 void recordLogs(){
-
+int check = 0;
 FILE *f = fopen("eventLog.txt", "w");
 if (f == NULL)
 {
@@ -211,6 +216,10 @@ if (f == NULL)
 }
 
 for(int i = 0; i<eventNum; i++){
+if(events[i].endTime > simulationTime && check == 0){
+fprintf(f, "The events below ended after simulation was terminated.\n");
+check = 1;
+}
 fprintf(f, "Event ID: %d, Status: %c, Request time: %d, End time: %d, Turnaround time: %d, Pad: %c\n", events[i].id, events[i].status, events[i].reqTime, events[i].endTime, events[i].trndTime, events[i].pad);
 }
 
@@ -218,12 +227,12 @@ fclose(f);
 }
 // the function that creates plane threads for landing
 void* LandingJob(void *arg){
-
+//waiting for a pad to become available
 while(pad_B_available != 0 && pad_A_available != 0){}
 
 struct timeval tv;
 time_t finishTime;
-
+//if pad B becomes available, lands rocket to the pad
 if(pad_B_available == 0){
 pthread_mutex_lock(&pad_B_mutex);
 pad_B_available = 1;
@@ -233,7 +242,7 @@ pthread_sleep(t);
 printf("The rocket is landed to pad B! Job ID: %d\n", finished.ID);
 gettimeofday(&tv, NULL);
 finishTime = tv.tv_sec - startTime;
-if(emergency == 1){
+if(emergency == 1){//prioritizing emergency
 maintainEvents(finished.ID, finishTime, finished.reqTime, 'E', 'B');
 }else{
 maintainEvents(finished.ID, finishTime, finished.reqTime, 'L', 'B');
@@ -243,7 +252,7 @@ pthread_cond_signal(&pad_B);
 pad_B_available = 0;
 pthread_mutex_unlock(&pad_B_mutex);
 
-}else{
+}else{//if pad A becomes available, lands rocket to the pad
 pthread_mutex_lock(&pad_A_mutex);
 pad_A_available = 1;
 printf("A rocket is landing!\n");
@@ -323,14 +332,6 @@ struct sched_param param;
 pthread_attr_init (&tattr);
 //checking the current scheduling parameter
 pthread_attr_getschedparam (&tattr, &param);
-/*
-	if(emergency==1){
-	printf("Emergency landing initiated!\n");
-	pthread_create(&tid[thread_count++], NULL, &EmergencyJob, NULL);
-	emergency = 0;
-	}
-	*/
-	//to avoid starvation of landing jobs
 // id = 0, launch
 if(nextJob->type == 0){
 	Enqueue(launchQ, *nextJob);
